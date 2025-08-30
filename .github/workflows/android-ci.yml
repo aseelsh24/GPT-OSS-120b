@@ -1,0 +1,50 @@
+name: Android CI & Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*.*.*' ] # Run on pushes to main and on version tags
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x ./gradlew
+
+    # This step replaces the placeholder token with the real secret from GitHub Secrets
+    # It only runs if the secret is available (i.e., during a real build, not a fork)
+    - name: Insert API Key
+      if: secrets.HF_API_TOKEN != ''
+      run: |
+        sed -i "s/YOUR_API_TOKEN_HERE/${{ secrets.HF_API_TOKEN }}/g" app/src/main/java/com/example/aichat/MainActivity.kt
+
+    - name: Build with Gradle (to check for compile errors)
+      run: ./gradlew build
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    # This part of the job only runs when a version tag (e.g., v1.0) is pushed
+    - name: Create Release and Upload APK
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: app/build/outputs/apk/debug/app-debug.apk
+        name: "Release ${{ github.ref_name }}"
+        body: "Automated release for version ${{ github.ref_name }}. Download the 'app-debug.apk' below to install."
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
